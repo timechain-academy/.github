@@ -18,40 +18,34 @@ ifeq ($(ARCH),arm64)
 TRIPLET                                 :=aarch64-linux-gnu
 export TRIPLET
 endif
-NODE_VERSION							:=v12.22.9
-export NODE_VERSION
-NODE_ALIAS								:=v14
-export NODE_ALIAS
 
-ifeq ($(user),)
-HOST_USER								:= root
-HOST_UID								:= $(strip $(if $(uid),$(uid),0))
+ifneq ($(target),)
+SERVICE_TARGET := $(target)
 else
-HOST_USER								:=  $(strip $(if $(USER),$(USER),nodummy))
-HOST_UID								:=  $(strip $(if $(shell id -u),$(shell id -u),4000))
+SERVICE_TARGET := ubuntu
+endif
+export SERVICE_TARGET
+
+ifeq ($(nocache),true)
+NOCACHE:=--no-cache
+endif
+ifeq ($(verbose),true)
+NOCACHE:=--verbose
+endif
+
+ifeq ($(user),root)
+HOST_USER :=root
+HOST_UID  :=$(strip $(if $(uid),$(uid),0))
+else
+#allow override by adding user= and/ or uid=  (lowercase!).
+#uid= defaults to 0 if user= set (i.e. root).
+#USER retrieved from env, UID from shell.
+HOST_USER :=$(strip $(if $(USER),$(USER),nodummy))
+HOST_UID  :=$(strip $(if $(shell id -u),$(shell id -u),4000))
 endif
 export HOST_USER
 export HOST_UID
 
-ifeq ($(docker),)
-DOCKER							        := $(shell which docker)
-else
-DOCKER   							    := $(docker)
-endif
-export DOCKER
-
-ifeq ($(compose),)
-DOCKER_COMPOSE						    := $(shell which docker-compose)
-else
-DOCKER_COMPOSE							:= $(compose)
-endif
-export DOCKER_COMPOSE
-ifeq ($(reset),true)
-RESET:=true
-else
-RESET:=false
-endif
-export RESET
 
 PYTHON                                  := $(shell which python)
 export PYTHON

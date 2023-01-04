@@ -63,3 +63,6 @@ jobs:
       - name: make
         run: |
           make
+          make report
+          make init
+          make nvm

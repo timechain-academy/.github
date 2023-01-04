@@ -376,7 +376,7 @@ initialize:## 	install libs and dependencies
 .PHONY: install install-cluster
 .SILENT:
 install: venv## 	create docker-compose.yml and run playground
-	bash -c './install.sh $(TRIPLET)'
+	bash -c 'echo'
 install-cluster: venv## 	create cluster/docker-compose.yml and run playground-cluster
 	bash -c 'pushd cluster && ./up-generic.sh 5 && popd'
 #######################

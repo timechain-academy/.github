@@ -61,30 +61,130 @@ export PIP2
 PIP3                                    := $(shell which pip3)
 export PIP3
 
-python_version_full := $(wordlist 2,4,$(subst ., ,$(shell python3 --version 2>&1)))
-python_version_major := $(word 1,${python_version_full})
-python_version_minor := $(word 2,${python_version_full})
-python_version_patch := $(word 3,${python_version_full})
+python_version_full                     := $(wordlist 2,4,$(subst ., ,$(shell python3 --version 2>&1)))
+python_version_major                    := $(word 1,${python_version_full})
+python_version_minor                    := $(word 2,${python_version_full})
+python_version_patch                    := $(word 3,${python_version_full})
 
-my_cmd.python.3 := $(PYTHON3) some_script.py3
-my_cmd := ${my_cmd.python.${python_version_major}}
+my_cmd.python.3                         := $(PYTHON3) some_script.py3
+my_cmd                                  := ${my_cmd.python.${python_version_major}}
 
-PYTHON_VERSION                         := ${python_version_major}.${python_version_minor}.${python_version_patch}
-PYTHON_VERSION_MAJOR                   := ${python_version_major}
-PYTHON_VERSION_MINOR                   := ${python_version_minor}
+PYTHON_VERSION                          := ${python_version_major}.${python_version_minor}.${python_version_patch}
+PYTHON_VERSION_MAJOR                    := ${python_version_major}
+PYTHON_VERSION_MINOR                    := ${python_version_minor}
 
 export python_version_major
 export python_version_minor
 export python_version_patch
 export PYTHON_VERSION
 
-#PROJECT_NAME defaults to name of the current directory.
+# NOTE: docker doesnt like names with dots
+# Use $(GIT_REPO_NAME) for commands that need the dotted name
+# $(PROJECT_NAME) is used in many docker commands in the GNUmakefile
 ifeq ($(project),)
-PROJECT_NAME							:= $(notdir $(PWD))
+PROJECT_NAME							:= timechain-academy#$(notdir $(PWD))
 else
 PROJECT_NAME							:= $(project)
 endif
 export PROJECT_NAME
+
+ifeq ($(user),root)
+HOST_USER := root
+HOST_UID  := $(strip $(if $(uid),$(uid),0))
+else
+#allow override by adding user= and/ or uid=  (lowercase!).
+#uid= defaults to 0 if user= set (i.e. root).
+#USER retrieved from env, UID from shell.
+HOST_USER :=  $(strip $(if $(USER),$(USER),nodummy))
+HOST_UID  :=  $(strip $(if $(shell id -u),$(shell id -u),4000))
+endif
+ifneq ($(uid),)
+HOST_UID  := $(uid)
+endif
+
+ifeq ($(ssh-pkey),)
+SSH_PRIVATE_KEY := $(HOME)/.ssh/id_rsa
+else
+SSH_PRIVATE_KEY := $(ssh-pkey)
+endif
+export SSH_PRIVATE_KEY
+
+ifeq ($(alpine),)
+ALPINE_VERSION := 3.15
+else
+ALPINE_VERSION := $(alpine)
+endif
+export ALPINE_VERSION
+
+ifeq ($(dind),)
+DIND_VERSION := 20.10.16
+else
+DIND_VERSION := $(dind)
+endif
+export DIND_VERSION
+
+ifeq ($(debian),)
+DEBIAN_VERSION := bookworm
+else
+DEBIAN_VERSION := $(debian)
+endif
+export DEBIAN_VERSION
+
+ifeq ($(ubuntu),)
+UBUNTU_VERSION := jammy
+else
+UBUNTU_VERSION := $(ubuntu)
+endif
+export UBUNTU_VERSION
+
+ifeq ($(nocache),true)
+NO_CACHE := --no-cache
+else
+NO_CACHE :=
+endif
+export NO_CACHE
+
+ifeq ($(verbose),true)
+VERBOSE := --verbose
+else
+VERBOSE :=
+endif
+export VERBOSE
+
+ifneq ($(passwd),)
+PASSWORD := $(passwd)
+else
+PASSWORD := changeme
+endif
+export PASSWORD
+
+ifneq ($(cmd),)
+CMD_ARGUMENTS := $(cmd)
+else
+CMD_ARGUMENTS :=
+endif
+export CMD_ARGUMENTS
+
+ifeq ($(private),true)
+# make docs private=true
+PRIVATE := books/private/PRIVATE.md
+PRIVATE_BITCOINBOOK := books/private/bitcoinbook/book.html
+PRIVATE_BITCOINBOOKCH01 := books/private/bitcoinbook/ch01.html
+PRIVATE_BITCOINBOOKCH02 := books/private/bitcoinbook/ch02.html
+PRIVATE_LNBOOK := books/private/lnbook/index.html
+else
+PRIVATE := books/private/README.md
+PRIVATE_BITCOINBOOK := books/private/README.md
+PRIVATE_LNBOOK := books/private/README.md
+endif
+export PRIVATE
+export PRIVATE_BITCOINBOOK
+export PRIVATE_LNBOOK
+
+DOCKER:=$(shell which docker)
+export DOCKER
+DOCKER_COMPOSE:=$(shell which docker-compose)
+export DOCKER_COMPOSE
 
 #GIT CONFIG
 GIT_USER_NAME							:= $(shell git config user.name)
@@ -93,24 +193,24 @@ GIT_USER_EMAIL							:= $(shell git config user.email)
 export GIT_USER_EMAIL
 GIT_SERVER								:= https://github.com
 export GIT_SERVER
-
-GIT_REPO_NAME							:= $(PROJECT_NAME)
+# NOTE: We use the dotted name for some commands
+# ie. ghp-import -c $(GIT_REPO_NAME) in make push-docs
+GIT_REPO_NAME							:= $(subst -,.,$(PROJECT_NAME))
 export GIT_REPO_NAME
 
 #Usage
-#make package-all profile=rsafier
-#make package-all profile=asherp
+#make push profile=timechain-academy
 #note on GH_TOKEN.txt file below
 ifeq ($(profile),)
-GIT_PROFILE								:= $(GIT_USER_NAME)
-ifeq ($(GIT_REPO_ORIGIN),git@github.com:PLEBNET_PLAYGROUND/plebnet-playground-docker.dev.git)
-GIT_PROFILE								:= PLEBNET-PLAYGROUND
+GIT_PROFILE								:=$(GIT_USER_NAME)
+ifeq ($(GIT_REPO_ORIGIN),git@github.com:timechain-academy/timechain.academy.git)
+GIT_PROFILE								:=timechain-academy
 endif
-ifeq ($(GIT_REPO_ORIGIN),https://github.com/PLEBNET_PLAYGROUND/plebnet-playground-docker.dev.git)
-GIT_PROFILE								:= PLEBNET-PLAYGROUND
+ifeq ($(GIT_REPO_ORIGIN),https://github.com/$(GITHUB_USER_NAME)/timechain.academy.git)
+GIT_PROFILE								:=$(GITHUB_USER_NAME)
 endif
 else
-GIT_PROFILE								:= $(profile)
+GIT_PROFILE								:=$(profile)
 endif
 export GIT_PROFILE
 
@@ -125,178 +225,144 @@ export GIT_REPO_ORIGIN
 GIT_REPO_PATH							:= $(HOME)/$(GIT_REPO_NAME)
 export GIT_REPO_PATH
 
-ifneq ($(bitcoin-datadir),)
-BITCOIN_DATA_DIR						:= $(bitcoin-datadir)
-else
-BITCOIN_DATA_DIR						:= $(HOME)/.bitcoin
-endif
-export BITCOIN_DATA_DIR
+PORT:=8000
+export PORT
 
-ifeq ($(nocache),true)
-NOCACHE					     			:= --no-cache
-#Force parallel build when --no-cache to speed up build
-PARALLEL                                := --parallel
-else
-NOCACHE						    		:=
-PARALLEL                                :=
-endif
-ifeq ($(parallel),true)
-PARALLEL                                := --parallel
-endif
-ifeq ($(para),true)
-PARALLEL                                := --parallel
-endif
-export NOCACHE
-export PARALLEL
+PLAYGROUND_DOCKER=$(wildcard sources/playground/docker)
+# PLAYGROUND_DOCKER=$(sources/playground/docker)
+export PLAYGROUND_DOCKER
+# $(if $(filter $(PLAYGROUND_DOCKER) ,$(wildcard ~/*)), the expected file exists)
+PLAYGROUND_DOCS:=$(wildcard $(PLAYGROUND_DOCKER)/docs)
+# PLAYGROUND_DOCS=$($(PLAYGROUND_DOCKER)/docs)
+export PLAYGROUND_DOCS
 
-ifeq ($(verbose),true)
-VERBOSE									:= --verbose
-else
-VERBOSE									:=
-endif
-export VERBOSE
+ELLIPTIC_DOCKER=$(wildcard sources/elliptic)
+export ELLIPTIC_DOCKER
 
-#TODO more umbrel config testing
-ifeq ($(port),)
-PUBLIC_PORT								:= 80
-else
-PUBLIC_PORT								:= $(port)
-endif
-export PUBLIC_PORT
+LEARNING_C=$(wildcard sources/learning-c)
+export LEARNING_C
 
-ifeq ($(nodeport),)
-NODE_PORT								:= 8333
-else
-NODE_PORT								:= $(nodeport)
-endif
-export NODE_PORT
+CRYPTOPP=$(wildcard sources/cryptopp)
+export CRYPTOPP
 
-ifneq ($(passwd),)
-PASSWORD								:= $(passwd)
-else
-PASSWORD								:= changeme
-endif
-export PASSWORD
+ANDROID_HOME                            := $(HOME)/Android/sdk
+ANDROID_SDK_ROOT                        := $(HOME)/Library/Android/sdk
+ANDROID_NDK_ROOT                        := $(HOME)/Library/Android/android-ndk
+ANDROID_AVD_HOME                        := $(HOME)/.android/avd
 
-ifeq ($(cmd),)
-CMD_ARGUMENTS							:=
-else
-CMD_ARGUMENTS							:= $(cmd)
-endif
-export CMD_ARGUMENTS
+NDK_SAMPLES                             := $(wildcard sources/nkd-samples)
 
-#ifeq ($(umbrel),true)
-##comply with umbrel conventions
-#PWD=/home/umbrel/umbrel/apps/$(PROJECT_NAME)
-#UMBREL=true
-#else
-#pwd ?= pwd_unknown
-#UMBREL=false
-#endif
-#export PWD
-#export UMBREL
-########################
+export ANDROID_HOME
+export ANDROID_SDK_ROOT
+export ANDROID_NDK_ROOT
+export ANDROID_AVD_HOME
+export NDK_SAMPLES
 
-PACKAGE_PREFIX                          := ghcr.io
-export PACKAGE_PREFIX
-.PHONY: - all
+PYTHON_BOOK                             := $(wildcard sources/books/public/python-book)
+export PYTHON_BOOK
+
+export
+
+#REF: https://linuxize.com/post/bash-printf-command/
+#Width directive
+#Here is an example:
+#
+#printf "%20s %d\n" Mark 305
+#Copy
+#%20s means set the field at least 20 characters long. Blanks are added before the text because, by default, the output is right-justified. To align the text to left, use the - flag (%-20s).
+#
+#      Mark 305
+#
+#\\ - Displays a backslash character.
+#\b - Displays a backspace character.
+#\n - Displays a new line.
+#\r - Displays a carriage return.
+#\t - Displays a horizontal tab.
+#\v - Displays a vertical tab.
+
+
+.PHONY: - help init build serve push signin git-add
 -:
-	#NOTE: 2 hashes are detected as 1st column output with color
+	# NOTE: 2 hashes are detected as 1st column output with color
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?##/ {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-.PHONY: help
-help:## 	print verbose help
-	@echo 'make [COMMAND] [EXTRA_ARGUMENTS]	'
-	@echo ''
-	#@echo ''
-	@echo 'make '
-	@echo '	 make all                        install and run playground and cluster'
-	@echo '	 make help                       print help'
-	@echo '	 make report                     print environment variables'
-	@echo '	 make initialize                 install dependencies - ubuntu/macOS'
-	@echo '	 make init                       initialize basic dependencies'
-	@echo '	 make build'
-	@echo '	 make build para=true            parallelized build'
-	@echo '	 make install'
-	@echo '	 make install-cluster'
-	@echo '	                                 services=bitcoind,lnd,lndg,rtl,thunderhub,docs,tor,dashboard,notebook'
-	@echo '	 make run'
-	@echo '	                                 nocache=true verbose=true'
-	@echo ''
-	@echo '	[NOSTR SERVICES]:	'
-	@echo '	 make nostr-rs-relay              build & run a nostr relay'
-	@echo '	 make nostr-rs-relay-build'
-	@echo '	 make nostr-rs-relay-run'
-	@echo ''
-	@echo '	[DEV ENVIRONMENT]:	'
-	@echo '	 make install-cluster'
-	@echo ''
-#	@echo '	 make shell            compiling environment on host machine'
-	@echo '	 make signin profile=gh-user     ~/GH_TOKEN.txt required from github.com'
-#	@echo '	 make header package-header'
-	@echo '	 make build'
-#	@echo '	 make build package-statoshi'
-	@echo '	 make package-all'
-	@echo ''
-	@echo '	 make install-python38-sh'
-	@echo '	 make install-python39-sh'
-	@echo ''
-#	@echo '	[EXTRA_ARGUMENTS]:	set build variables	'
-#	@echo ''
-#	@echo '	nocache=true'
-#	@echo '	            	add --no-cache to docker command and apk add $(NOCACHE)'
-#	@echo '	port=integer'
-#	@echo '	            	set PUBLIC_PORT default 80'
-#	@echo ''
-#	@echo '	nodeport=integer'
-#	@echo '	            	set NODE_PORT default 8333'
-#	@echo ''
-#	@echo '	            	TODO'
-#	@echo ''
-#	@echo '	[DOCKER COMMANDS]:	push a command to the container	'
-#	@echo ''
-#	@echo '	cmd=command 	'
-#	@echo '	cmd="command"	'
-#	@echo '	             	send CMD_ARGUMENTS to the [TARGET]'
-	@echo ''
-	@echo '	[EXAMPLES]:'
-	@echo ''
-	@echo '	make run nocache=true verbose=true'
-	@echo ''
-	@echo '	make init && play help'
-	@echo ''
+help:## 	verbose help
+# help:print help
+# 	test
+# 		test
+# 			test
+# 				test
+# 	test:test
+# 		test:test
+# 			test:test
+# 				test:test
+# 	test:	test
+# 		test:		test
+# 			test:			test
+# 				test:				test
+## help:print help
+## 	test
+## 		test
+## 			test
+## 				test
+## 	test:test
+## 		test:test
+## 			test:test
+## 				test:test
+## 	test:	test
+## 		test:		test
+## 			test:			test
+## 				test:				test
+### help:print help
+### 	test
+### 		test
+### 			test
+### 				test
+### 	test:test
+### 		test:test
+### 			test:test
+### 				test:test
+### 	test:	test
+### 		test:		test
+### 			test:			test
+### 				test:				test
 	@sed -n 's/^# //p' ${MAKEFILE_LIST} | column -t -s ':' |  sed -e 's/^/# /'
 	@sed -n 's/^## //p' ${MAKEFILE_LIST} | column -t -s ':' |  sed -e 's/^/## /'
 	@sed -n 's/^### //p' ${MAKEFILE_LIST} | column -t -s ':' |  sed -e 's/^/### /'
 
 .PHONY: report
-report:## 	print environment arguments
+report:## 	report
 	@echo ''
 	@echo '	[ARGUMENTS]	'
 	@echo '      args:'
+	@echo ' '
+	@echo '        - THIS_FILE=${THIS_FILE}'
+	@echo '        - TIME=${TIME}'
 	@echo '        - PROJECT_NAME=${PROJECT_NAME}'
+	@echo ' '
 	@echo '        - HOME=${HOME}'
 	@echo '        - PWD=${PWD}'
+	@echo ' '
 	@echo '        - PYTHON=${PYTHON}'
-	# @echo '        - PYTHON2=${PYTHON2}'
 	@echo '        - PYTHON3=${PYTHON3}'
 	@echo '        - PYTHON_VERSION=${PYTHON_VERSION}'
 	@echo '        - PYTHON_VERSION_MAJOR=${PYTHON_VERSION_MAJOR}'
 	@echo '        - PYTHON_VERSION_MINOR=${PYTHON_VERSION_MINOR}'
 	@echo '        - PIP=${PIP}'
-	# @echo '        - PIP2=${PIP2}'
 	@echo '        - PIP3=${PIP3}'
-	# @echo '        - THIS_FILE=${THIS_FILE}'
-	@echo '        - TIME=${TIME}'
-	@echo '        - PACKAGE_PREFIX=${PACKAGE_PREFIX}'
+	@echo ' '
 	@echo '        - ARCH=${ARCH}'
 	@echo '        - TRIPLET=${TRIPLET}'
-	@echo '        - HOST_USER=${HOST_USER}'
-	@echo '        - HOST_UID=${HOST_UID}'
-	@echo '        - PUBLIC_PORT=${PUBLIC_PORT}'
-	@echo '        - NODE_VERSION=${NODE_VERSION}'
-	@echo '        - NODE_ALIAS=${NODE_ALIAS}'
-	@echo '        - DOCKER_COMPOSE=${DOCKER_COMPOSE}'
+	@echo '        - PORT=${PORT}'
+	@echo ' '
+	@echo '        - PRIVATE=${PRIVATE}'
+	@echo '        - PRIVATE_BITCOINBOOK=${PRIVATE_BITCOINBOOK}'
+	@echo '        - PRIVATE_LNBOOK=${PRIVATE_LNBOOK}'
+	@echo '        - PYTHON_BOOK=${PYTHON_BOOK}'
+	@echo ' '
+	@echo '        - PLAYGROUND_DOCKER=${PLAYGROUND_DOCKER}'
+	@echo '        - PLAYGROUND_DOCS=${PLAYGROUND_DOCS}'
+	@echo ' '
 	@echo '        - GIT_USER_NAME=${GIT_USER_NAME}'
 	@echo '        - GIT_USER_EMAIL=${GIT_USER_EMAIL}'
 	@echo '        - GIT_SERVER=${GIT_SERVER}'
@@ -307,253 +373,354 @@ report:## 	print environment arguments
 	@echo '        - GIT_REPO_ORIGIN=${GIT_REPO_ORIGIN}'
 	@echo '        - GIT_REPO_NAME=${GIT_REPO_NAME}'
 	@echo '        - GIT_REPO_PATH=${GIT_REPO_PATH}'
-	@echo '        - NOCACHE=${NOCACHE}'
-	# @echo '        - VERBOSE=${VERBOSE}'
-	# @echo '        - PASSWORD=${PASSWORD}'
-	# @echo '        - CMD_ARGUMENTS=${CMD_ARGUMENTS}'
+	@echo ' '
+	@echo '        - ANDROID_HOME=${ANDROID_HOME}'
+	@echo '        - ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}'
+	@echo '        - ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}'
+	@echo '        - ANDROID_AVD_HOME=${ANDROID_AVD_HOME}'
+	@echo '        - NDK_SAMPLES=${NDK_SAMPLES}'
 
-#######################
+.PHONY: init initialize docs
+initialize:## 	initialize
+	./scripts/initialize
+	# disable until playground initialize fixed
+	# test ./sources/playground/docker/scripts/initialize && ./sources/playground/docker/scripts/initialize || echo "Try: `make resources`"
+init: initialize## 	init
+	python3 -m pip install -r requirements.txt
+	python3 -m pip install -r sources/requirements.txt
 
-ORIGIN_DIR:=$(PWD)
-MACOS_TARGET_DIR:=/var/root/$(PROJECT_NAME)
-LINUX_TARGET_DIR:=/root/$(PROJECT_NAME)
-export ORIGIN_DIR
-export TARGET_DIR
-
-all: initialize init install-cluster install## 	all
-.PHONY: venv
-venv:## 	create python3 virtualenv .venv
-	test -d .venv || $(PYTHON3) -m virtualenv .venv
-	( \
-	   source .venv/bin/activate; pip install -r requirements.txt; \
-	);
-	@echo "To activate (venv)"
-	@echo "try:"
-	@echo ". .venv/bin/activate"
-	@echo "or:"
-	@echo "make venv-test"
-##:	venv-vest            source .venv/bin/activate; pip install -r requirements.txt;
-venv-test:## 	test virutalenv .venv
-	# insert test commands here
-	test -d .venv || $(PYTHON3) -m virtualenv .venv
-	( \
-	   source .venv/bin/activate; pip install -r requirements.txt; \
-	);
-.PHONY: init setup
-.SILENT:
-setup: init venv## 	basic setup
-init:## 	basic setup
-
-ifneq ($(shell id -u),0)
-	@echo
-	@echo $(shell id -u -n) 'try:'
-	@echo 'make super'
-	@echo 'If permissions issue...'
-	@echo
-endif
-
-	git config --global --add safe.directory $(PWD)
-	install -v -m=o+rwx $(PWD)/scripts/*  /usr/local/bin/
-	$(PYTHON3) -m pip install --upgrade pip 2>/dev/null
-	$(PYTHON3) -m pip install -q -r requirements.txt 2>/dev/null
-	pushd scripts > /dev/null; for string in *; do sudo chmod -R o+rwx /usr/local/bin/$$string; done; popd  2>/dev/null || echo
-
-
-#######################
-.PHONY: blocknotify
-blocknotify:
-	bash -c 'install -v $(PWD)/scripts/blocknotify  /usr/local/bin/blocknotify'
-#######################
-.PHONY: initialize
-initialize:## 	install libs and dependencies
-	./scripts/initialize  #>&/dev/null
-#######################
-.PHONY: install install-cluster
-.SILENT:
-install: venv## 	create docker-compose.yml and run playground
-	bash -c 'echo'
-install-cluster: venv## 	create cluster/docker-compose.yml and run playground-cluster
-	bash -c 'pushd cluster && ./up-generic.sh 5 && popd'
-#######################
-.PHONY: uninstall
-uninstall: 	run uninstall.sh script
-	bash -c './uninstall.sh $(TRIPLET)'
-#######################
-.PHONY: run
-run: docs init## 	docker-compose up -d
-	$(DOCKER_COMPOSE) $(VERBOSE) $(NOCACHE) up -d
-#######################
-.PHONY: build
-build: init
-	docker pull  shahanafarooqui/rtl:0.11.0
-	$(DOCKER_COMPOSE) $(VERBOSE) build --pull $(PARALLEL) --no-rm $(NOCACHE)
-#######################
-.PHONY: btcd
-btcd:
-	bash -c "cd btcd && make btcd && cd .."
-.PHONY: docs
-docs: init
-	@echo "Use 'make docs nocache=true' to force docs rebuild..."
-
-	echo "## MAKE COMMAND" >> MAKE.md
-	echo '```' > MAKE.md
-	make help >> MAKE.md
-	echo '```' >> MAKE.md
-
-	echo "## PLAY COMMAND" > PLAY.md
-	echo '```' >> PLAY.md
-	play >> PLAY.md
-	echo '```' >> PLAY.md
-#
-	echo "## PLAY-BITCOIN COMMAND" >> PLAY.md
-	echo '```' >> PLAY.md
-	play-bitcoin >> PLAY.md
-	echo '```' >> PLAY.md
-#
-	echo "## PLAY-LND COMMAND" >> PLAY.md
-	echo '```' >> PLAY.md
-	play-lnd >> PLAY.md
-	echo '```' >> PLAY.md
-
-	install -v README.md docs/docs/index.md
-	install -v MAKE.md docs/docs/MAKE.md
-	install -v PLAY.md docs/docs/PLAY.md
-	sed 's/images/.\/images/' README.md > docs/docs/index.md
-	cp -R ./images ./docs/docs
-	$(DOCKER_COMPOSE) $(VERBOSE) build $(NOCACHE) docs
-#######################
-.PHONY: install-python38-sh
-install-python38-sh:
-	bash -c './scripts/install-python3.8.sh'
-	make init
-#######################
-.PHONY: install-python39-sh
-install-python39-sh: init
-	bash -c './scripts/install-python3.9.sh'
-#######################
-#.PHONY: run
-#run: build
-#	@echo 'run'
-#ifeq ($(CMD_ARGUMENTS),)
-#	@echo '$(CMD_ARGUMENTS)'
-#	$(DOCKER_COMPOSE) $(VERBOSE) -p $(PROJECT_NAME)_$(HOST_UID) run -d --publish $(PUBLIC_PORT):3000 --publish 8125:8125 --publish 8126:8126 --publish 8333:8333 --publish 8332:8332 statoshi sh
-#	@echo ''
-#else
-#	@echo ''
-#	$(DOCKER_COMPOSE) $(VERBOSE) -p $(PROJECT_NAME)_$(HOST_UID) run -d --publish $(PUBLIC_PORT):3000 --publish 8125:8125 --publish 8126:8126 --publish 8333:8333 --publish 8332:8332 statoshi sh -c "$(CMD_ARGUMENTS)"
-#	@echo ''
-#endif
-#	@echo 'Give grafana a few minutes to set up...'
-#	@echo 'http://localhost:$(PUBLIC_PORT)'
-########################
-.PHONY: extract
-extract:
-	@echo 'extract'
-	#extract TODO CREATE PACKAGE for distribution
-	sed '$d' $(DOCKERFILE) | sed '$d' | sed '$d' > $(DOCKERFILE_EXTRACT)
-	docker build -f $(DOCKERFILE_EXTRACT) --rm -t $(DOCKERFILE_EXTRACT) .
-	docker run --name $(DOCKERFILE_EXTRACT) $(DOCKERFILE_EXTRACT) /bin/true
-	docker rm $(DOCKERFILE_EXTRACT)
-	rm -f  $(DOCKERFILE_EXTRACT)
-#######################
-.PHONY: torproxy
-torproxy:
-	@echo ''
-	#REF: https://hub.docker.com/r/dperson/torproxy
-	#bash -c 'docker run -it -p 8118:8118 -p 9050:9050 -p 9051:9051 -d dperson/torproxy'
-	@echo ''
-ifneq ($(shell id -u),0)
-	bash -c 'sudo make torproxy user=root &'
-endif
-ifeq ($(CMD_ARGUMENTS),)
-	$(DOCKER_COMPOSE) $(VERBOSE) -f docker-compose.yml -p $(PROJECT_NAME)_$(HOST_UID) run --publish 8118:8118 --publish 9050:9050  --publish 9051:9051 --rm torproxy
+docs:## 	make docs private=true to include books
+ifneq ($(private),true)
+	$(MAKE) clean-books
 else
-	$(DOCKER_COMPOSE) $(VERBOSE) -f docker-compose.yml -p $(PROJECT_NAME)_$(HOST_UID) run --publish 8118:8118 --publish 9050:9050  --publish 9051:9051 --rm torproxy sh -c "$(CMD_ARGUMENTS)"
+
+	PRIVATE_LNBOOK01=books/private/lnbook/01_introduction.html
+	PRIVATE_LNBOOK02=books/private/lnbook/02_getting_started.html
+	export
+
+	$(MAKE) serve
 endif
-	@echo ''
-submodules:## 	git submodule update --init --recursive
-	@git submodule update --init --recursive
-.PHONY: nvm
-.ONESHELL:
-nvm:## 	nvm
-	@curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/master/install.sh | bash || git pull -C $(HOME)/.nvm && export NVM_DIR="$(HOME)/.nvm" && [ -s "$(NVM_DIR)/nvm.sh" ] && \. "$(NVM_DIR)/nvm.sh" && [ -s "$(NVM_DIR)/bash_completion" ] && \. "$(NVM_DIR)/bash_completion"  && nvm install $(NODE_VERSION) && nvm use $(NODE_VERSION)
-	@source ~/.bashrc && nvm alias $(NODE_ALIAS) $(NODE_VERSION)
-.PHONY: nostr-rs-relay
-nostr-rs-relay:## 	pushd nostr-rs-relay && make build run && popd
-	pushd $(PWD)/nostr-rs-relay && make build run && popd
-nostr-rs-relay-build:## 	pushd nostr-rs-relay-build && make && popd
-	pushd $(PWD)/nostr-rs-relay && make build && popd
-nostr-rs-relay-run:## 	pushd nostr-rs-relay-run && make && popd
-	pushd $(PWD)/nostr-rs-relay && make run && popd
+
+
+run: docs shell
+	$(NOHUP) $(DOCKER_COMPOSE) $(VERBOSE) up &
+
+
+
+.PHONY: clean-resources clean sources resources
+clean-sources: 	clean sources
+clean:## 	clean
+	rm -rf sources/playground/docker
+	rm -rf sources/books/bitcoinbook
+	rm -rf sources/books/lnbook
+	rm -rf sources/books/python
+	rm -rf sources/qt/webengine
+	rm -rf sources/elliptic
+	rm -rf sources/learning-c
+	rm -rf sources/cryptopp
+
+.SILENT:
+sources: resources## 	sources
+resources:
+	$(MAKE) playground
+	$(MAKE) qt-webengine
+	$(MAKE) books
+	$(MAKE) elliptic
+	$(MAKE) learning-c
+	#  $(MAKE) cryptopp
+
+.PHONY: playground $(PLAYGROUND_DOCKER)
+playground: | $(PLAYGROUND_DOCKER)## 	clone plebnet-playground-docker
+	# echo test1 $(PLAYGROUND_DOCKER)
+	# echo test1 $(PLAYGROUND_DOCS)
+ifeq ($(PLAYGROUND_DOCKER),)
+	git clone --progress --verbose --depth 1 -b master https://github.com/PLEBNET-PLAYGROUND/plebnet-playground-docker.git sources/playground/docker || true
+endif
+
+$(PLAYGROUND_DOCKER):
+	@echo "sources/playground/docker/docs exists!!"
+	# echo test2 $(PLAYGROUND_DOCKER)
+	# echo test2 $(PLAYGROUND_DOCS)
+	git -C $(PLAYGROUND_DOCKER) reset --hard
+	git -C $(PLAYGROUND_DOCKER) pull -f
+
+.PHONY: elliptic $(ELLIPTIC_DOCKER) $(ELLIPTIC_NOTEBOOK)
+elliptic: | $(ELLIPTIC_DOCKER)## 	run elliptic docker service on http://localhost:8050
+
+ifeq ($(ELLIPTIC_DOCKER),)
+	git clone --progress --verbose --depth 1 -b master \
+        https://github.com/timechain-academy/elliptic.git sources/elliptic || true
+endif
+
+$(ELLIPTIC_DOCKER):
+	@echo "sources/elliptic exists!!"
+	git -C $(ELLIPTIC_DOCKER) reset --hard
+	git -C $(ELLIPTIC_DOCKER) pull -f
+
+	docker-compose build $(NOCACHE) $(VERBOSE) elliptic
+	$(DOCKER_COMPOSE) $(VERBOSE) -p elliptic_$(HOST_UID) run --publish 8050:8050 -d --rm elliptic
+
+	docker-compose build $(NOCACHE) $(VERBOSE) elliptic_notebook
+    $(DOCKER_COMPOSE) $(VERBOSE) -p elliptic_notebook_$(HOST_UID) run --publish 8888:8888 -d --rm elliptic_notebook
+
+.PHONY: learning-c $(LEARNING_C)
+learning-c: | $(LEARING_C)## 	install learning-c examples
+
+ifeq ($(LEARNING_C),)
+	git clone --progress --verbose --depth 1 -b master \
+        https://github.com/timechain-academy/learning-c.git sources/learning-c || true
+endif
+
+$(LEARNING_C):
+	@echo "sources/elliptic exists!!"
+	git -C $(LEARNING_C) reset --hard
+	git -C $(LEARNING_C) pull -f
+
+	# docker-compose build $(NOCACHE) $(VERBOSE) elliptic
+	# $(DOCKER_COMPOSE) $(VERBOSE) -p elliptic_$(HOST_UID) run --publish 8050:8050 -d --rm #<learning-c>
+
+	# docker-compose build $(NOCACHE) $(VERBOSE) elliptic_notebook
+    # $(DOCKER_COMPOSE) $(VERBOSE) -p elliptic_notebook_$(HOST_UID) run --publish 8888:8888 -d --rm #<learning-c>
+
+.PHONY: cryptopp $(CRYPTOPP) $(NDK_SAMPLES)
+cryptopp: | $(CRYPTOPP) $(NDK_SAMPLES)## 	install crypto++ library option: NDK=true to install android SDK & NDK
+
+ifeq ($(CRYPTOPP),)
+	git clone --progress --verbose --depth 1 -b master \
+        https://github.com/timechain-academy/cryptopp.git sources/cryptopp || true
+endif
+
+	CXXFLAGS+=-stdlib=libc++ $(MAKE) install -C sources/cryptopp
+
+ifeq ($(NDK),true)
+	$(shell mkdir -p $(ANDROID_SDK))
+	$(shell mkdir -p $(ANDROID_HOME))
+	$(shell mkdir -p $(ANDROID_SDK_ROOT))
+	$(shell mkdir -p $(ANDROID_NDK_ROOT))
+	$(shell mkdir -p $(ANDROID_AVD_HOME))
+	./sources/cryptopp/TestScripts/install-ndk.sh
+ifeq ($(NDK_SAMPLES),)
+	git clone https://github.com/android/ndk-samples.git sources/nkd-samples
+endif
+endif
+
+$(CRYPTOPP):
+	@echo "sources/cryptopp exists!!"
+	git -C $(CRYPTOPP) reset --hard
+	git -C $(CRYPTOPP) pull -f
+
+$(NDK_SAMPLES):
+	@echo "sources/ndk-samples exists!!"
+	git -C $(NDK_SAMPLES) reset --hard
+	git -C $(NDK_SAMPLES) pull -f
+
+
+qt-webengine:## 	qt webengine
+	[ ! -d "sources/qt" ] && \
+	[ ! -d "sources/qt/webengine" ] && \
+	git clone --progress --verbose --depth 1 -b v5.15.5-lts git://code.qt.io/qt/qtwebengine.git sources/qt/webengine || true
+	[ ! -d "sources/qt/webengine/src/3rdparty/qtwebengine-chromium" ] && \
+	git clone --progress --verbose --depth 1 -b v5.15.2 git://code.qt.io/qt/qtwebengine-chromium.git sources/qt/webengine/src/3rdparty/qtwebengine-chromium || true
+
+clean-books:## 	clean-books
+	rm -rf sources/books/private/bitcoinbook
+	rm -rf sources/books/private/lnbook
+	rm -rf sources/books/*.html
+	rm -rf docs/books/private/bitcoinbook
+	rm -rf docs/books/private/lnbook
+
+books:mastering-bitcoin mastering-lightning python-book## 	make books private=true
+	mkdir -p sources/books/public
+	mkdir -p sources/books/private
+	touch sources/books/README.md
+	touch sources/books/public/README.md
+	touch sources/books/private/README.md
+	bash -c "if hash brew 2>/dev/null; then echo 'brew installed'; brew install pandoc asciidoc; fi"
+	bash -c "if hash apt-get 2>/dev/null; then echo 'apt-get installed'; apt-get install pandoc asciidoc; fi"
+	#bash -c 'pandoc -s sources/books/README.md -o sources/books/index.html  --metadata title="" '
+ifeq ($(private),true)
+	pushd sources/books/private/bitcoinbook > /dev/null; for string in *.asciidoc; do echo "$$string"; done; popd || echo "."
+	pushd sources/books/private/bitcoinbook > /dev/null; for string in *.md; do sed 's/asciidoc/html/g' $$string | tee $$string; done; popd || echo "....."
+	pushd sources/books/private/bitcoinbook > /dev/null; for string in *.asciidoc; do asciidoctor $$string; done; popd || echo "..."
+	pushd sources/books/private/lnbook      > /dev/null; for string in *.asciidoc; do echo "$$string"; done; popd || echo "...."
+	pushd sources/books/private/lnbook      > /dev/null; for string in *.md; do sed 's/asciidoc/html/g' $$string | tee $$string; done; popd || echo "....."
+	pushd sources/books/private/lnbook      > /dev/null; for string in *.asciidoc; do asciidoctor $$string; done; popd || echo "......"
+else
+	$(MAKE) clean-books
+endif
+
+mastering-bitcoin:## 	included when private=true
+ifeq ($(private),true)
+	git clone --progress --verbose --depth 1 -b 1653630097/6f13274/77b91b1 https://github.com/randymcmillan/bitcoinbook.git \
+		sources/books/private/bitcoinbook || true
+else
+	rm -rf sources/books/private/bitcoinbook
+	rm -rf docs/books/private/bitcoinbook
+endif
+mastering-lightning:## 	included when private=true
+ifeq ($(private),true)
+	git clone --progress --verbose --depth 1 https://github.com/lnbook/lnbook.git                                           \
+		sources/books/private/lnbook || true
+else
+	rm -rf sources/books/private/lnbook
+	rm -rf docs/books/private/lnbook
+endif
+
+python-book: | $(PYTHON_BOOK)## 	excluded when public=false
+ifneq ($(public),false)
+
+ifeq ($(PYTHON_BOOK),)
+	@echo "cloning python-book"
+	git clone --progress --verbose --depth 1 https://github.com/kyclark/tiny_python_projects.git                             \
+        sources/books/public/python-book || true
+endif
+
+else
+	rm -rf sources/books/public/python-book
+	rm -rf docs/books/public/python-book
+endif
+
+$(PYTHON_BOOK):
+	@echo "sources/books/public/python-book exists!!"
+	# echo test2 $(PLAYGROUND_DOCKER)
+	# echo test2 $(PLAYGROUND_DOCS)
+	git -C $(PYTHON_BOOK) reset --hard
+	git -C $(PYTHON_BOOK) pull -f
+
+
+
+
+
+
+
+
+.PHONY: build serve build-readme build-shell shell shell-test
+build-readme:## 	build-readme
+	#cat sources/git/GET_STARTED.md >  sources/README.md
+	cat sources/HEADER.md >  sources/README.md
+	#echo '```' >> README.md
+	#make help > sources/COMMANDS.md
+	#echo '```' >> README.md
+	cat sources/FOOTER.md >> sources/README.md
+	# bash -c "if hash brew 2>/dev/null; then echo 'brew installed'; brew install pandoc asciidoc; fi"
+	# bash -c "if hash apt-get 2>/dev/null; then echo 'apt-get installed'; apt-get install pandoc asciidoc; fi"
+	# bash -c 'pandoc -s README.md -o index.html  --metadata title="" '
+
+build-docs: build-readme## 	make build-docs private=true to include books
+# DEV NOTES: It is useful to make serve (no private=true) and ensure nav is
+# working first - then make serve private=true and test nav with private
+	$(MAKE) build-readme
+	$(MAKE) sources
+	mkdir -p docs
+	bash -c "if hash brew 2>/dev/null; then echo 'brew installed'; brew install pandoc asciidoc; fi"
+	bash -c "if hash apt-get 2>/dev/null; then echo 'apt-get installed'; apt-get install pandoc asciidoc; fi"
+ifeq ($(private),true)
+	$(MAKE) books private=$(private)
+	pushd sources/books/private/bitcoinbook > /dev/null; for string in *.asciidoc; do echo "$$string"; done; popd || echo "."
+	pushd sources/books/private/bitcoinbook > /dev/null; for string in *.md; do sed 's/asciidoc/html/g' $$string | tee $$string; done; popd || echo "....."
+	pushd sources/books/private/bitcoinbook > /dev/null; for string in *.asciidoc; do asciidoctor --doctype=book $$string; done; popd || echo "..."
+	pushd sources/books/private/lnbook      > /dev/null; for string in *.asciidoc; do echo "$$string"; done; popd || echo "...."
+	pushd sources/books/private/lnbook      > /dev/null; for string in *.md; do sed 's/asciidoc/html/g' $$string | tee $$string; done; popd || echo "....."
+	pushd sources/books/private/lnbook      > /dev/null; for string in *.asciidoc; do asciidoctor --doctype book $$string; done; popd || echo "......"
+
+	PRIVATE_LNBOOK01=books/private/lnbook/01_introduction.html
+	PRIVATE_LNBOOK02=books/private/lnbook/02_getting_started.html
+	export
+
+endif
+	[ -d sources/playground/docker/docs ]; export PLAYGROUND_DOCS=sources/playground/docker/docs
+	mkdocs $(VERBOSE) build --dirty
+
+build-playground:## 	build-playground
+	pushd sources/playground/docker && make initialize init build && popd
+
+run-playground:## 	run-playground
+	pushd sources/playground/docker && make install && popd
+
+run-playground-cluster:## 	run-playground-cluster
+	pushd sources/playground/docker && make install-cluster && popd
+
+run-all:
+	$(MAKE) run-playground
+	$(MAKE) elliptic
+
+serve: build-docs## 	build and serve docs using mkdocs on host (not docker)
+	docker stop timechain.academy_docs || true
+	docker run -dit --rm --name timechain.academy_docs -p 8080:80 -v "$(PWD)/docs":/usr/local/apache2/htdocs httpd:2.4
+
+build-shell:## 	build the ubuntu docker image
+	docker-compose build $(NOCACHE) $(VERBOSE) ${SERVICE_TARGET}
+
+.PHONY: shell
+shell: build-shell## 	run the ubuntu docker environment
+ifeq ($(CMD_ARGUMENTS),)
+	$(DOCKER_COMPOSE) $(VERBOSE) -p $(PROJECT_NAME)_$(HOST_UID) run -it --rm ${SERVICE_TARGET} bash
+else
+	$(DOCKER_COMPOSE) $(VERBOSE) -p $(PROJECT_NAME)_$(HOST_UID) run -it --rm $(SERVICE_TARGET) bash -c "$(CMD_ARGUMENTS)"
+endif
+
+shell-test:## 	shell-test
+	docker-compose -p $(PROJECT_NAME)_$(HOST_UID) run --rm ${SERVICE_TARGET} sh -c "curl -fsSL https://raw.githubusercontent.com/timechain-academy/timechain.academy/master/scripts/shell-test"
+
+#shell-network-test:## 	shell-network-test
+#	docker-compose -p $(PROJECT_NAME)_$(HOST_UID) run --rm ${SERVICE_TARGET} bash -c "curl -fsSL https://raw.githubusercontent.com/timechain-academy/timechain.academy/master/scripts/shell-network-test"
+
+
 #######################
-.PHONY: clean
-clean:## 	docker compose down --remove-orphans --rmi all
+.PHONY: clean-docker-images
+clean-docker-images:## 	remove orphans & rmi all
 	# remove created images
 	@$(DOCKER_COMPOSE) -p $(PROJECT_NAME) down --remove-orphans --rmi all 2>/dev/null \
 	&& echo 'Image(s) for "$(PROJECT_NAME)" removed.' \
 	|| echo 'Image(s) for "$(PROJECT_NAME)" already removed.'
 #######################
-.PHONY: prune
-prune:## 	docker system prune -af (very destructive!)
-	$(DOCKER_COMPOSE) -p $(PROJECT_NAME) down
+.PHONY: prune-system
+prune-system:## 	docker system prune -af (very destructive!)
+	$(DOCKER_COMPOSE) -p $(PROJECT_NAME)_$(HOST_UID) down
 	docker system prune -af &
 #######################
 .PHONY: prune-network
-prune-playground:## 	remove plebnet-playground-docker network
-	$(DOCKER_COMPOSE) -p $(PROJECT_NAME) down
-	docker network rm plebnet-playground-docker* 2>/dev/null || echo
-prune-cluster:## 	remove plebnet-playground-cluster network
-	$(DOCKER_COMPOSE) -p plebnet-playground-cluster down
-	docker network rm plebnet-playground-cluster* 2>/dev/null || echo
+prune-network:## 	remove timechain-academy network
+	$(DOCKER_COMPOSE) -p $(PROJECT_NAME)_$(HOST_UID) down
+	docker network rm $(PROJECT_NAME)_$(HOST_UID) 2>/dev/null || echo
 #######################
-.PHONY: push
+
+
+
+push-docs: clean-books ## 	ghp-import to deploy docs folder
+	# NOTE: The docs folder becomes the root on the gh-pages branch
+	# NOTE: In the github.com pages setting use branch: gh-pages / (root)
+	ghp-import -n \
+        -m "$(TIME):Deployed by $(GIT_USER_NAME) commit: $(GIT_HASH)" \
+        -c $(GIT_REPO_NAME) \
+        -p \
+        -r origin \
+        -b gh-pages \
+        docs
+
+
 push:
-	@echo push
+	@echo clean-books is being performed....
+	$(MAKE) clean-books
 	git checkout -b $(TIME)/$(GIT_PREVIOUS_HASH)/$(GIT_HASH)
 	git push --set-upstream origin $(TIME)/$(GIT_PREVIOUS_HASH)/$(GIT_HASH)
-	git add docs
-	git commit --amend --no-edit --allow-empty || echo failed to commit --amend --no-edit
+	#git add docs
+	#git commit --no-edit --allow-empty -m "$(TIME)" || echo failed to commit --amend --no-edit
 	git push -f origin $(TIME)/$(GIT_PREVIOUS_HASH)/$(GIT_HASH):$(TIME)/$(GIT_PREVIOUS_HASH)/$(GIT_HASH)
 
-.PHONY: push-docs
-push-docs: statoshi-docs push
-	@echo 'push-docs'
+push-all: push push-to-master push-docs#push-to-main ## 	push-to-master push-docs
+push-to-master:## 	push-to-master
+	git push -f  $(GIT_REPO_ORIGIN) $(GIT_BRANCH):master || echo failed to push docs
+push-to-main:## 	push-to-main
+	git push -f  $(GIT_REPO_ORIGIN) $(GIT_BRANCH):main || echo failed to push docs
+
+
+config-gpg:## 	add gpg to git signing key
+	./scripts/config-gpg.sh
 
 SIGNIN=randymcmillan
 export SIGNIN
 
-.PHONY: signin
 signin:
 #Place a file named GH_TOKEN.txt in your $HOME - create in https://github.com/settings/tokens (Personal access tokens)
 	bash -c 'cat ~/GH_TOKEN.txt | docker login ghcr.io -u $(GIT_PROFILE) --password-stdin'
-#######################
-package-plebnet: signin
-
-	#touch TIME && echo $(TIME) > TIME && git add -f TIME
-	#legit . -m "make package-header at $(TIME)" -p 00000
-	#git commit --amend --no-edit --allow-empty
-
-	bash -c 'docker tag  $(PROJECT_NAME)_thunderhub   $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/thunderhub-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip thunderhub'
-	bash -c 'docker push                              $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/thunderhub-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip thunderhub'
-	bash -c 'docker tag  $(PROJECT_NAME)_dashboard    $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/dashboard-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip dashboard'
-	bash -c 'docker push                              $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/dashboard-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip dashboard'
-	bash -c 'docker tag  $(PROJECT_NAME)_notebook     $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/notebook-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip notebook'
-	bash -c 'docker push                              $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/notebook-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip notebook'
-	bash -c 'docker tag  $(PROJECT_NAME)_bitcoind     $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/bitcoind-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip bitcoind'
-	bash -c 'docker push                              $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/bitcoind-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip bitcoind'
-	bash -c 'docker tag  $(PROJECT_NAME)_docs         $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/docs-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip docs'
-	bash -c 'docker push                              $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/docs-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip docs'
-	bash -c 'docker tag  $(PROJECT_NAME)_tor          $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/tor-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip tor'
-	bash -c 'docker push                              $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/tor-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip tor'
-	bash -c 'docker tag  $(PROJECT_NAME)_lnd          $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/lnd-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip lnd'
-	bash -c 'docker push                              $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/lnd-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip lnd'
-	bash -c 'docker tag  shahanafarooqui/rtl:0.11.0   $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/rtl-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip rtl'
-	bash -c 'docker push                              $(PACKAGE_PREFIX)/$(GIT_PROFILE)/$(PROJECT_NAME)/rtl-$(TRIPLET)/$(HOST_USER):$(TIME) || echo skip rtl'
-
-########################
-.PHONY: package-all
-package-all: init package-plebnet
-#INSERT other scripting here
-	bash -c "echo insert more scripting here..."
-########################
-

@@ -1,0 +1,136 @@
+---
+version: '3.4'
+services:
+
+  ubuntu:
+    container_name: ${PROJECT_NAME}_${HOST_UID:-4000}_ubuntu
+    hostname: ubuntu_${HOST_UID:-4000}
+    environment:
+      - UID=${HOST_UID:-4000}
+    user: ${HOST_USER:-nodummy}
+    image: ${PROJECT_NAME}:${HOST_USER:-nodummy}
+    privileged: true
+    build:
+      context: .
+      target: base
+      dockerfile: docker/ubuntu.dockerfile
+      args:
+        - HOST_UID=${HOST_UID:-4000}
+        - HOST_USER=${HOST_USER:-nodummy}
+        - SSH_PRIVATE_KEY=${SSH_PRIVATE_KEY}
+        - PASSWORD=${PASSWORD}
+        - UBUNTU_VERSION=${UBUNTU_VERSION}
+    networks:
+      - frontend
+    command: ["ssh-agent ssh-add"]
+    volumes:
+      - type: bind
+        source: ${HOME:-.}
+        target: /home/${HOST_USER}
+      - type: bind
+        source: ${PWD:-.}
+        target: /home/${HOST_USER}/timechain.academy
+      - type: bind
+        source: ~/.ssh
+        target: /home/${HOST_USER}/.ssh
+
+  elliptic:
+    container_name: ${PROJECT_NAME}_${HOST_UID:-4000}_elliptic
+    hostname: elliptic_${HOST_UID:-4000}
+    environment:
+      - UID=${HOST_UID:-4000}
+    image: ${PROJECT_NAME}:${HOST_USER:-nodummy}_elliptic
+    privileged: true
+    build:
+      context: sources/elliptic
+      dockerfile: Dockerfile
+    expose:
+      - "8050"
+    ports:
+      - "8050:8050"
+    networks:
+      - frontend
+    command:
+      - python
+      - main.py
+    volumes:
+      - type: bind
+        source: ${PWD}/sources/elliptic
+        target: /home/elliptic
+    working_dir: /home/elliptic
+
+  elliptic_notebook:
+    container_name: ${PROJECT_NAME}_${HOST_UID:-4000}_elliptic_notebook
+    hostname: elliptic_${HOST_UID:-4000}
+    environment:
+      - UID=${HOST_UID:-4000}
+    image: ${PROJECT_NAME}:${HOST_USER:-nodummy}_elliptic_notebook
+    privileged: true
+    build:
+      context: sources/elliptic
+      dockerfile: Dockerfile
+    expose:
+      - "8888"
+    ports:
+      - "8888:8888"
+    networks:
+      - frontend
+    command:
+      - jupyter
+      - notebook
+      - .
+      - --port=8888
+      - --no-browser
+      - --ip=0.0.0.0
+      - --allow-root
+    volumes:
+      - type: bind
+        source: ${PWD}/sources/elliptic
+        target: /home/elliptic
+    working_dir: /home/elliptic
+
+  docs:
+    container_name: ${PROJECT_NAME}_${HOST_UID:-4000}_docs
+    hostname: docs_${HOST_UID:-4000}
+    restart: unless-stopped
+    environment:
+      # Always error on the side of NOT publishing
+      # COPYRIGHTED book content
+      # if PRIVATE is not set
+      # we default to private!
+      - PRIVATE=${PRIVATE:-private}
+      - PRIVATE_BITCOINBOOK=${PRIVATE_BITCOINBOOK:-private}
+      - PRIVATE_LNBOOK=${PRIVATE_LNBOOK:-private}
+      - PLAYGROUND_DOCS=${PLAYGROUND_DOCS:-https://github.com/PLEBNET-PLAYGROUND/plebnet-playground-docker/blob/master/docs/docs/index.md}
+    expose:
+      - '18000'
+    ports:
+      - 18000:18000
+    image: ${PROJECT_NAME}_${HOST_UID:-4000}_docs
+    build:
+      args:
+        - PRIVATE=${PRIVATE:-private}
+        - PRIVATE_BITCOINBOOK=${PRIVATE_BITCOINBOOK:-private}
+        - PRIVATE_LNBOOK=${PRIVATE_LNBOOK:-private}
+        - PLAYGROUND_DOCS=${PLAYGROUND_DOCS:-https://github.com/PLEBNET-PLAYGROUND/plebnet-playground-docker/blob/master/docs/docs/index.md}
+      context: .
+      dockerfile: mkdocs/mkdocs.dockerfile
+    networks:
+      - frontend
+    volumes:
+      # NOTE: /root contains the timechain.academy content
+      # NOTE: /root/sources is the "docs_dir" in mkdocs terms
+      # NOTE: /root/docs is the "site_dir" in mkdocs terms
+      - type: bind
+        source: ${PWD:-.}
+        target: /root
+      - type: bind
+        source: ${PWD:-.}/sources
+        target: /root/sources
+      - type: bind
+        source: ${PWD:-.}/docs
+        target: /root/docs
+
+networks:
+  frontend:
+    name: custom_frontend

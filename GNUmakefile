@@ -1,10 +1,11 @@
 SHELL := /bin/bash
+NOHUP := $(shell which nohup)
 
-PWD 									?= pwd_unknown
+PWD                                     ?= pwd_unknown
 
-THIS_FILE								:= $(lastword $(MAKEFILE_LIST))
+THIS_FILE                               := $(lastword $(MAKEFILE_LIST))
 export THIS_FILE
-TIME									:= $(shell date +%s)
+TIME                                    := $(shell date +%s)
 export TIME
 
 ARCH                                    :=$(shell uname -m)

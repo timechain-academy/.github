@@ -1,4 +1,4 @@
-name: automate.yml
+name: timechain-academy
 
 # Controls when the action will run.
 on:
@@ -31,29 +31,12 @@ jobs:
     name: github-workspace
     strategy:
       matrix:
-        python-version: ['3.6','3.7','3.8','3.10']
-        exclude:
-          - os: ubuntu-latest
-            python-version: ['2.7']
-          - os: macos-latest
-            python-version: ['2.7']
-          - os: macos-10.15
-            python-version: ['2.7']
-          - os: m1.local
-            python-version: ['2.7']
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: styfle/cancel-workflow-action@0.9.1
         with:
           access_token: ${{ github.token }}
-      - name: Checkout
-        uses: actions/checkout@v2.4.0
-      - name: Setup Matrix
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-          architecture: x64
       - name: Print github workspace
         run: |
           printenv
@@ -61,42 +44,22 @@ jobs:
   ubuntu-build_and_test:
     strategy:
       matrix:
-        os: [ubuntu-latest]
-        python-version: ['3.6','3.7','3.8','3.10']
-        exclude:
-          - os: ubuntu-latest
-            python-version: ['2.7']
-          - os: macos-latest
-            python-version: ['2.7']
-          - os: macos-10.15
-            python-version: ['2.7']
-          - os: m1.local
-            python-version: ['2.7']
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: styfle/cancel-workflow-action@0.9.1
         with:
           access_token: ${{ github.token }}
-      - name: Checkout
-        uses: actions/checkout@v2.4.0
-      - name: Setup Matrix
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-          architecture: x64
-      - name: automate.sh matrix
-        run: |
-          echo $GITHUB_WORKSPACE
-          cd $GITHUB_WORKSPACE
-          python3 -c "import sys; print(sys.version)"
-          make
-          make help
-          make report
-          make init
-          git config --global user.email "admin@timechain.academy"
-          git config --global user.name "TimeChain Academy Admin"
-          make books
-          make sources
-          make resources
-          make build-playground
-          make build-shell
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - uses: syphar/restore-virtualenv@v1
+        id: cache-virtualenv
+      - uses: syphar/restore-pip-download-cache@v1
+        if: steps.cache-virtualenv.outputs.cache-hit != 'true'
 
+      - run: pip install -r requirements.txt
+        if: steps.cache-virtualenv.outputs.cache-hit != 'true'
+
+      - name: make
+        run: |
+          make

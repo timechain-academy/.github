@@ -388,6 +388,8 @@ initialize:## 	initialize
 init: initialize## 	init
 	python3 -m pip install -r requirements.txt
 	python3 -m pip install -r sources/requirements.txt
+install:
+	@echo "install"
 
 docs:## 	make docs private=true to include books
 ifneq ($(private),true)

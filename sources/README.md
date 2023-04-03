@@ -1,12 +1,8 @@
----
-title: TimeChain.Academy
-description: Start learning Bitcoin & Lightning Development today!
+## [TimeChain.Academy ](http://github.com/timechain-academy)
 
----
-
----
-### discord: [github-chat](https://discord.gg/XkxafTyQZC)
----
+```
+git clone https://github.com/timechain-academy/timechain.academy.git
+```
 <details>
 <summary>👀</summary>
 <p>
@@ -21,4 +17,13 @@ tr -d '\n' | cut -c 17-368600 | xxd -r -p > bitcoin.pdf
 </p>
 </details>
 
-[![automate.yml](https://github.com/timechain-academy/timechain.academy/actions/workflows/automate.yml/badge.svg)](https://github.com/timechain-academy/timechain.academy/actions/workflows/automate.yml)
+<details>
+<summary>👀</summary>
+<p>
+
+#### Referal Links:
+
+[![DigitalOcean Referral Badge](https://web-platforms.sfo2.digitaloceanspaces.com/WWW/Badge%202.svg)](https://www.digitalocean.com/?refcode=ae5c7d05da91&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge)
+
+</p>
+</details>
